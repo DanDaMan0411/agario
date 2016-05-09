@@ -1,0 +1,22 @@
+{
+  "name": "agar.io",
+  "version": "1.0.0",
+  "description": "Agar.io clone",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanDaMan0411/agario.git"
+  },
+  "keywords": [
+    "agario"
+  ],
+  "author": "Dan Kirichok",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DanDaMan0411/agario/issues"
+  },
+  "homepage": "https://github.com/DanDaMan0411/agario#readme"
+}
