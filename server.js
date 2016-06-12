@@ -51,9 +51,7 @@ var gameFoodPositions = makeFoodPositions()
 
 io.on("connection", function(socket){
 	console.log("Connection");
-	
-	console.log(gameFoodPositions.length + "\n")
-		
+			
 	socket.emit("makeFood", gameFoodPositions);
 	
 	socket.on("newPlayer", function(blobInfo){
@@ -63,13 +61,14 @@ io.on("connection", function(socket){
 		gameBlobs[socket.id] = blobInfo;
 				
 		socket.broadcast.emit("playerAdded", blobInfo)
+		
+		console.log(gameBlobs)
+		
+		socket.emit("makePlayers", gameBlobs);
 	});
 	
-	socket.on("foodEaten", function(eatenPosition){
-		console.log("Eaten Position: " + eatenPosition)
-		
+	socket.on("foodEaten", function(eatenPosition){		
 		gameFoodPositions[eatenPosition] = generateNewFood();
-		console.log(gameFoodPositions.length)
 		socket.broadcast.emit("removeFood", eatenPosition);
 		
 		//This updates the food list held by all clients
@@ -84,7 +83,10 @@ io.on("connection", function(socket){
 	});
 	
 	socket.on("disconnect", function(){
-		console.log(socket.id + " Disconnected");
+		var playerId = socket.id;
+		console.log(playerId + " Disconnected");
+		
+		socket.broadcast.emit("playerDisconnect", playerId);
 		
 		delete gameBlobs[socket.id]
 	});

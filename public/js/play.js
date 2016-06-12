@@ -28,6 +28,8 @@ var socket = io();
 //Gives the blob the socket id it has
 socket.on("assignId", function(newPlayerId){
 	BLOB_ID = newPlayerId;
+	
+	console.log("My ID: " + BLOB_ID)
 })
 
 //This runs when player first connects, it initializes all the food positions
@@ -47,6 +49,34 @@ socket.on("addFood", function(newFoodPosition){
 	addQueue.push(newFoodPosition);
 })
 
+//Queues for player adding and removing
+addPlayerQueue = [];
+removePlayerQueue = [];
+
+socket.on("playerDisconnect", function(playerId){
+	console.log(playerId + " has disconnected.");
+	for (var i = 0; i < enemies.children.length; i++){
+		if (playerId == enemies.children[i].id){
+			removePlayerQueue.push(i);
+		}else{
+			console.log("Enemy not found in enemies");
+		}
+	};
+});
+
+//This creates pre existing players when you join the lobby
+socket.on("makePlayers", function(players){
+	for (player in players){
+		if (player != BLOB_ID){
+			addPlayerQueue.push(players[player])
+		}
+	}
+});
+
+socket.on("playerAdded", function(newPlayerInfo){
+	addPlayerQueue.push(newPlayerInfo);
+})
+
 var playState = {
 	getRandomInt: function(min, max) {
 		return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -62,6 +92,7 @@ var playState = {
 	makeBlobInfo: function(){
 		//All of the blobs important information for storage on main server		
 		var blobInfo = {
+			id: BLOB_ID,
 			blobType: playerBlobType,
 			x: blob.x,
 			y: blob.y,
@@ -141,7 +172,46 @@ var playState = {
 		blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
 		blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
 	},
-
+	
+	initEnemies: function(){
+		enemies = game.add.group();
+		
+		enemies.enableBody = true;
+		enemies.physicsBodyType = true;
+		enemies.physicsBodyType = Phaser.Physics.P2JS;
+	},
+	
+	spawnEnemy: function(xPos, yPos, blobType, mass, width, height, id){
+		var enemy = game.add.sprite(xPos, yPos, blobType);
+				
+		game.physics.p2.enable(enemy, false);
+		
+		enemy.width = width;
+		enemy.height = height;
+		
+		enemy.body.setCircle(enemy.width/2);
+		
+		enemy.body.fixedRotation = true;
+		
+		enemy.body.setCollisionGroup(playerCollisionGroup);
+		
+		enemy.body.collides(foodCollisionGroup, this.eatFood, this);
+		enemy.body.collides(playerCollisionGroup, this.hitPlayer, this);
+				
+		//Start Mass
+		enemy.body.data.mass = mass;
+		
+		enemy.id = id;
+		
+		enemy.name = "enemy";
+		
+		enemies.add(enemy);
+		
+		console.log("Enemy spawned");
+		
+		console.log("Number of enemies: " + enemies.children.length);
+	},
+	
 	create: function(){
 		game.physics.startSystem(Phaser.Physics.P2JS);
 		
@@ -162,37 +232,11 @@ var playState = {
 		game.physics.p2.updateBoundsCollisionGroup();
 		
 		this.initFood();
+		this.initEnemies();
+		
+		
 		
 		this.initPlayer(this.getRandomInt(startDim, game.world.width - startDim), this.getRandomInt(startDim, game.world.width - startDim), playerBlobType);
-		
-		socket.on("playerAdded", function(newPlayerInfo){
-			//This function should be out on the top layer but it doesn't work out there. Try to get a fix at some point
-			function spawnEnemy(xPos, yPos, blobType, mass, width, height){
-				var enemy = game.add.sprite(xPos, yPos, blobType);
-				
-				game.physics.p2.enable(enemy, false);
-				
-				enemy.width = width;
-				enemy.height = height;
-				
-				enemy.body.setCircle(enemy.width/2);
-				
-				enemy.body.fixedRotation = true;
-				
-				enemy.body.setCollisionGroup(playerCollisionGroup);
-				
-				enemy.body.collides(foodCollisionGroup, this.eatFood, this);
-				enemy.body.collides(playerCollisionGroup, this.hitPlayer, this);
-						
-				//Start Mass
-				enemy.body.data.mass = mass;
-				
-				enemy.name = "enemy"
-			}
-			
-			spawnEnemy(newPlayerInfo.x, newPlayerInfo.y, newPlayerInfo.blobType, newPlayerInfo.mass, newPlayerInfo.width, newPlayerInfo.height)
-			console.log("enemy spawned")
-		})
 	},
 	
 	checkSprite: function(body1, body2) {
@@ -237,5 +281,16 @@ var playState = {
 			foods.children[addQueue[0]] = this.addFood(addQueue[0]);
 			addQueue.shift();
 		}
+		
+		if (addPlayerQueue.length > 0){
+			this.spawnEnemy(addPlayerQueue[0].x, addPlayerQueue[0].y, addPlayerQueue[0].blobType, addPlayerQueue[0].mass, addPlayerQueue[0].width, addPlayerQueue[0].height, addPlayerQueue[0].id);
+					
+			addPlayerQueue.shift();
+		}
+		
+		if (removePlayerQueue.length > 0){
+			enemies.children[removePlayerQueue[0]].kill();
+		}
+		
 	},
 }
