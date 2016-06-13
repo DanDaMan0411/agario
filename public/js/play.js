@@ -2,6 +2,8 @@ var maxFoodAmount = 10
 var BLOB_ID;
 var foodPos;
 
+var enemies;
+
 //This is for the blob
 var startDim = 100;
 
@@ -29,7 +31,7 @@ var socket = io();
 socket.on("assignId", function(newPlayerId){
 	BLOB_ID = newPlayerId;
 	
-	console.log("My ID: " + BLOB_ID)
+	console.log("My ID: " + BLOB_ID);
 })
 
 //This runs when player first connects, it initializes all the food positions
@@ -53,6 +55,9 @@ socket.on("addFood", function(newFoodPosition){
 addPlayerQueue = [];
 removePlayerQueue = [];
 
+//This updates other players position for client
+updatePosQueue = [];
+
 socket.on("playerDisconnect", function(playerId){
 	console.log(playerId + " has disconnected.");
 	for (var i = 0; i < enemies.children.length; i++){
@@ -75,7 +80,18 @@ socket.on("makePlayers", function(players){
 
 socket.on("playerAdded", function(newPlayerInfo){
 	addPlayerQueue.push(newPlayerInfo);
-})
+});
+
+socket.on("playerMoved", function(moveInfo){
+	if (enemies != undefined){
+		for (var i = 0; i < enemies.children.length; i++){
+			if (enemies.children[i].id == moveInfo.id){
+				var enemyPosition = i;
+				updatePosQueue.push({id: enemyPosition, position: moveInfo.position});
+			}
+		}
+	}
+});
 
 var playState = {
 	getRandomInt: function(min, max) {
@@ -219,10 +235,12 @@ var playState = {
 		
 		game.physics.p2.restitution = 0.8;
 		
-		game.world.setBounds(0, 0, 500, 500)
+		game.world.setBounds(0, 0, 500, 500);
+		
+		game.stage.disableVisibilityChange = true;
 		
 		//This repeats the grid background to fit the whole bounds
-		game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid')
+		game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid');
 		
 		game.physics.p2.setPostBroadphaseCallback(this.checkSprite, this);
 		
@@ -265,11 +283,13 @@ var playState = {
 	
 	update: function(){
 		blob.body.setZeroVelocity();
-		
+				
 		if (Phaser.Rectangle.contains(blob.body, game.input.x, game.input.y)){
 			blob.body.velocity.setTo(0, 0);
 		}else{
 			game.physics.arcade.moveToPointer(blob, 200);
+			
+			socket.emit("posUpdated", blob.position);
 		}
 						
 		if (removeQueue.length > 0){
@@ -290,6 +310,15 @@ var playState = {
 		
 		if (removePlayerQueue.length > 0){
 			enemies.children[removePlayerQueue[0]].kill();
+		}
+				
+		if (updatePosQueue.length > 0){
+			enemies.children[updatePosQueue[0].id].body.x = updatePosQueue[0].position.x;
+			enemies.children[updatePosQueue[0].id].body.y = updatePosQueue[0].position.y;
+			
+			enemies.children[updatePosQueue[0].id].body.setZeroVelocity();
+			
+			updatePosQueue.shift();
 		}
 		
 	},

@@ -54,17 +54,24 @@ io.on("connection", function(socket){
 			
 	socket.emit("makeFood", gameFoodPositions);
 	
+	socket.emit("assignId", socket.id);
 	socket.on("newPlayer", function(blobInfo){
 		makeFoodPositions();
-		socket.emit("assignId", socket.id);
 		
 		gameBlobs[socket.id] = blobInfo;
+		
+		console.log(blobInfo)
 				
 		socket.broadcast.emit("playerAdded", blobInfo)
-		
-		console.log(gameBlobs)
-		
+				
 		socket.emit("makePlayers", gameBlobs);
+	});
+	
+	socket.on("posUpdated", function(playerPos){
+		gameBlobs[socket.id].x = playerPos.x
+		gameBlobs[socket.id].y = playerPos.y
+			
+		socket.broadcast.emit("playerMoved", {id: socket.id, position: playerPos})
 	});
 	
 	socket.on("foodEaten", function(eatenPosition){		
