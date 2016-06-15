@@ -74,8 +74,17 @@ io.on("connection", function(socket){
 		socket.broadcast.emit("playerMoved", {id: socket.id, position: playerPos})
 	});
 	
-	socket.on("foodEaten", function(eatenPosition){		
+	socket.on("massChanged", function(massInfo){
+		gameBlobs[socket.id].width = massInfo.width;
+		gameBlobs[socket.id].height = massInfo.height;
+		gameBlobs[socket.id].mass = massInfo.mass;
+				
+		socket.broadcast.emit("massChanged", massInfo);
+	})
+	
+	socket.on("foodEaten", function(eatenPosition){
 		gameFoodPositions[eatenPosition] = generateNewFood();
+		
 		socket.broadcast.emit("removeFood", eatenPosition);
 		
 		//This updates the food list held by all clients

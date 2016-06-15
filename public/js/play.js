@@ -1,4 +1,4 @@
-var maxFoodAmount = 10
+var maxFoodAmount = 10;
 var BLOB_ID;
 var foodPos;
 
@@ -40,8 +40,8 @@ socket.on("makeFood", function(foodPositions){
 })
 
 //These are queues for when food nneds to be either generated or removed from clients world
-var removeQueue = []
-var addQueue = []
+var removeQueue = [];
+var addQueue = [];
 
 socket.on("removeFood", function(eatenPosition){
 	removeQueue.push(eatenPosition);
@@ -57,15 +57,18 @@ removePlayerQueue = [];
 
 //This updates other players position for client
 updatePosQueue = [];
+updateMassQueue = [];
 
 socket.on("playerDisconnect", function(playerId){
 	console.log(playerId + " has disconnected.");
-	for (var i = 0; i < enemies.children.length; i++){
-		if (playerId == enemies.children[i].id){
-			removePlayerQueue.push(i);
-		}else{
-			console.log("Enemy not found in enemies");
-		}
+	if (enemies != undefined){
+		for (var i = 0; i < enemies.children.length; i++){
+			if (playerId == enemies.children[i].id){
+				removePlayerQueue.push(i);
+			}else{
+				console.log("Enemy not found in enemies");
+			};
+		};
 	};
 });
 
@@ -82,15 +85,33 @@ socket.on("playerAdded", function(newPlayerInfo){
 	addPlayerQueue.push(newPlayerInfo);
 });
 
-socket.on("playerMoved", function(moveInfo){
+//This finds the position of the enemy in enemy group by matching the id
+function findEnemyPosition(id){
 	if (enemies != undefined){
-		for (var i = 0; i < enemies.children.length; i++){
-			if (enemies.children[i].id == moveInfo.id){
-				var enemyPosition = i;
-				updatePosQueue.push({id: enemyPosition, position: moveInfo.position});
+		for (var i = 0; i < enemies.children.length; i ++){
+			if (enemies.children[i].id == id){
+				return i;
 			}
 		}
 	}
+	return null	
+}
+
+//This is event handler for if another player in the game has moved.
+//This sends new players position to updatePosQueue to be updated in update function of play state
+socket.on("playerMoved", function(moveInfo){
+	var enemyPosition = findEnemyPosition(moveInfo.id);
+	if (enemyPosition != null){
+		updatePosQueue.push({id: enemyPosition, position: moveInfo.position});	
+	}
+});
+
+//Event handler for if another player's mass has changed
+//Sends new mass to updateMassQueue to be updated in update function.
+socket.on("massChanged", function(massInfo){
+	var enemyPosition = findEnemyPosition(massInfo.id);
+	
+	updateMassQueue.push({id: enemyPosition, height: massInfo.height, width: massInfo.width, mass: massInfo.mass})
 });
 
 var playState = {
@@ -170,23 +191,30 @@ var playState = {
 		socket.emit("newPlayer", blobInfo)
 	},
 	
-	eatFood: function(blobBody, foodBody){		
-		blob.body.data.mass ++;
-		
-		var foodBodyPosition = foodBody.sprite.id
-		
-		socket.emit("foodEaten", foodBodyPosition)	
-				
+	eatFood: function(blobBody, foodBody){
 		foodBody.sprite.kill();
+		
+		//This exists because the enemy blobs collide like the player is supposed to
+		//This isn't suppposed to happen and I couldn't figure out how to get rid of it
+		//The if statement is a semi fix for this problem, but it may cause problems in other areas
+		if (blobBody.sprite.name != "enemy"){
+			blob.body.data.mass ++;
+					
+			var foodBodyPosition = foodBody.sprite.id;
+						
+			socket.emit("foodEaten", foodBodyPosition);	
 			
-		blobBody.sprite.height ++
-		blobBody.sprite.width ++
-		
-		this.updateBlob();
-		
-		blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
-		blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
-		blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
+			blobBody.sprite.height ++;
+			blobBody.sprite.width ++;
+			
+			socket.emit("massChanged", {id: BLOB_ID, height: blobBody.sprite.height, width: blobBody.sprite.width, mass: blob.body.data.mass})
+			
+			this.updateBlob();
+			
+			blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
+			blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
+			blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
+		}
 	},
 	
 	initEnemies: function(){
@@ -199,7 +227,7 @@ var playState = {
 	
 	spawnEnemy: function(xPos, yPos, blobType, mass, width, height, id){
 		var enemy = game.add.sprite(xPos, yPos, blobType);
-				
+							
 		game.physics.p2.enable(enemy, false);
 		
 		enemy.width = width;
@@ -209,12 +237,6 @@ var playState = {
 		
 		enemy.body.fixedRotation = true;
 		
-		enemy.body.setCollisionGroup(playerCollisionGroup);
-		
-		enemy.body.collides(foodCollisionGroup, this.eatFood, this);
-		enemy.body.collides(playerCollisionGroup, this.hitPlayer, this);
-				
-		//Start Mass
 		enemy.body.data.mass = mass;
 		
 		enemy.id = id;
@@ -252,20 +274,10 @@ var playState = {
 		this.initFood();
 		this.initEnemies();
 		
-		
-		
 		this.initPlayer(this.getRandomInt(startDim, game.world.width - startDim), this.getRandomInt(startDim, game.world.width - startDim), playerBlobType);
 	},
 	
-	checkSprite: function(body1, body2) {
-		if ((body1.sprite.name == 'enemy' && body2.sprite.name == 'player') || (body2.sprite.name == 'player' && body1.sprite.name == "enemy")){			
-			return false;
-		}
-
-		return true;
-	},
-	
-	addFood: function(position){
+	addFood: function(position){		
 		var food = foods.create(foodPos[position][0], foodPos[position][1], foodColors[this.getRandomInt(0, foodColors.length-1)]);
 		
 		food.id = position;
@@ -277,13 +289,11 @@ var playState = {
 		food.body.setCollisionGroup(foodCollisionGroup);
 		
 		food.body.collides([foodCollisionGroup, playerCollisionGroup])
-		
-		return food
 	},
 	
 	update: function(){
 		blob.body.setZeroVelocity();
-				
+		
 		if (Phaser.Rectangle.contains(blob.body, game.input.x, game.input.y)){
 			blob.body.velocity.setTo(0, 0);
 		}else{
@@ -298,7 +308,8 @@ var playState = {
 		}
 		
 		if (addQueue.length > 0){
-			foods.children[addQueue[0]] = this.addFood(addQueue[0]);
+			foods.children[addQueue[0]].body.setZeroVelocity();
+			this.addFood(addQueue[0]);
 			addQueue.shift();
 		}
 		
@@ -319,6 +330,20 @@ var playState = {
 			enemies.children[updatePosQueue[0].id].body.setZeroVelocity();
 			
 			updatePosQueue.shift();
+		}
+		
+		if (updateMassQueue.length > 0){			
+			//This is to make sure enemies array is actually created
+			if (enemies.children[updateMassQueue[0].id] != undefined){
+				enemies.children[updateMassQueue[0].id].height = updateMassQueue[0].height;
+				enemies.children[updateMassQueue[0].id].width = updateMassQueue[0].width;
+				
+				enemies.children[updateMassQueue[0].id].body.setCircle(enemies.children[updateMassQueue[0].id].width/2);
+				enemies.children[updateMassQueue[0].id].body.setCollisionGroup(playerCollisionGroup);
+				enemies.children[updateMassQueue[0].id].body.collides(foodCollisionGroup, this.eatFood, this);
+				
+				updateMassQueue.shift();
+			}
 		}
 		
 	},
