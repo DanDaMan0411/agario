@@ -4,8 +4,12 @@ var foodPos;
 
 var enemies;
 
+var foodAmount = 0;
+
 //This is for the blob
 var startDim = 100;
+//This is the max height and width for a blob that eats food
+var maxEatFoodSize = 400;
 
 var foodColors = [
 	"greenFood",
@@ -26,6 +30,8 @@ function getRandomInt(min, max){
 var playerBlobType = blobTypes[getRandomInt(0, blobTypes.length-1)]
 
 var socket = io();
+
+var playerAlive;
 
 //Gives the blob the socket id it has
 socket.on("assignId", function(newPlayerId){
@@ -60,15 +66,16 @@ updatePosQueue = [];
 updateMassQueue = [];
 
 socket.on("playerDisconnect", function(playerId){
-	console.log(playerId + " has disconnected.");
-	if (enemies != undefined){
+	if(enemies != undefined){
 		for (var i = 0; i < enemies.children.length; i++){
-			if (playerId == enemies.children[i].id){
+			if(playerId == enemies.children[i].id){
 				removePlayerQueue.push(i);
-			}else{
-				console.log("Enemy not found in enemies");
 			};
 		};
+	};
+	
+	if(playerId == BLOB_ID){
+		playerAlive = false;
 	};
 });
 
@@ -102,7 +109,7 @@ function findEnemyPosition(id){
 socket.on("playerMoved", function(moveInfo){
 	var enemyPosition = findEnemyPosition(moveInfo.id);
 	if (enemyPosition != null){
-		updatePosQueue.push({id: enemyPosition, position: moveInfo.position});	
+		updatePosQueue[0] = ({id: enemyPosition, position: moveInfo.position});	
 	}
 });
 
@@ -153,6 +160,8 @@ var playState = {
 				
 				food.id = i;
 				
+				food.name = "food";
+				
 				food.body.setCircle(10);
 				
 				food.body.velocity = (0, 0)
@@ -160,12 +169,18 @@ var playState = {
 				food.body.setCollisionGroup(foodCollisionGroup);
 				
 				food.body.collides([foodCollisionGroup, playerCollisionGroup])
+			
+				foodAmount ++;
 			}
 		}
 	},
 	
 	initPlayer: function(xPos, yPos, blobType){
 		blob = game.add.sprite(xPos, yPos, blobType);
+		
+		playerAlive = true;
+		
+		blob.id = BLOB_ID;
 		
 		game.physics.p2.enable(blob, false);
 		
@@ -178,7 +193,7 @@ var playState = {
 		blob.body.collides(foodCollisionGroup, this.eatFood, this);
 		
 		game.camera.follow(blob);
-		
+				
 		//Start Mass
 		blob.body.data.mass = 25;
 		
@@ -197,23 +212,27 @@ var playState = {
 		//This exists because the enemy blobs collide like the player is supposed to
 		//This isn't suppposed to happen and I couldn't figure out how to get rid of it
 		//The if statement is a semi fix for this problem, but it may cause problems in other areas
-		if (blobBody.sprite.name != "enemy"){
+		if (blobBody.sprite.name != "enemy" && foodAmount <= maxFoodAmount){
 			blob.body.data.mass ++;
 					
 			var foodBodyPosition = foodBody.sprite.id;
 						
 			socket.emit("foodEaten", foodBodyPosition);	
 			
-			blobBody.sprite.height ++;
-			blobBody.sprite.width ++;
+			if (blobBody.sprite.height < maxEatFoodSize && blobBody.sprite.width < maxEatFoodSize){		
+				blobBody.sprite.height ++;
+				blobBody.sprite.width ++;
+							
+				socket.emit("massChanged", {id: BLOB_ID, height: blobBody.sprite.height, width: blobBody.sprite.width, mass: blob.body.data.mass})
+				
+				this.updateBlob();
+				
+				blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
+				blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
+				blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
+			}
 			
-			socket.emit("massChanged", {id: BLOB_ID, height: blobBody.sprite.height, width: blobBody.sprite.width, mass: blob.body.data.mass})
-			
-			this.updateBlob();
-			
-			blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
-			blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
-			blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
+			foodAmount --;
 		}
 	},
 	
@@ -242,12 +261,8 @@ var playState = {
 		enemy.id = id;
 		
 		enemy.name = "enemy";
-		
+						
 		enemies.add(enemy);
-		
-		console.log("Enemy spawned");
-		
-		console.log("Number of enemies: " + enemies.children.length);
 	},
 	
 	create: function(){
@@ -262,7 +277,8 @@ var playState = {
 		game.stage.disableVisibilityChange = true;
 		
 		//This repeats the grid background to fit the whole bounds
-		game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid');
+		var background = game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid');
+		background.name = "background"
 		
 		game.physics.p2.setPostBroadphaseCallback(this.checkSprite, this);
 		
@@ -277,23 +293,40 @@ var playState = {
 		this.initPlayer(this.getRandomInt(startDim, game.world.width - startDim), this.getRandomInt(startDim, game.world.width - startDim), playerBlobType);
 	},
 	
+	
+	//This handles collision between sprites
+	checkSprite: function(body1, body2){
+		//This runs when two players collide 
+		if ((body1.sprite.name == 'enemy' && body2.sprite.name == 'blob') || (body2.sprite.name == 'blob' && body1.sprite.name == "enemy")){			
+			console.log("\n\n\n++++PLAYER COLLISION++++\n\n\n")
+			var collidedSprites = [{id: body1.sprite.id, height: body1.sprite.height}, {id: body2.sprite.id, height: body2.sprite.height}]
+			socket.emit("playerCollision", collidedSprites)
+			return false;
+		}			
+		return true;			
+	},
+	
 	addFood: function(position){		
 		var food = foods.create(foodPos[position][0], foodPos[position][1], foodColors[this.getRandomInt(0, foodColors.length-1)]);
 		
 		food.id = position;
 		
+		food.name = "food";
+		
 		food.body.setCircle(10);
 		
-		food.body.velocity = (0, 0)
+		food.body.velocity = (0, 0);
 		
 		food.body.setCollisionGroup(foodCollisionGroup);
 		
-		food.body.collides([foodCollisionGroup, playerCollisionGroup])
+		food.body.collides([foodCollisionGroup, playerCollisionGroup]);
+		
+		foodAmount ++;
 	},
 	
-	update: function(){
+	update: function(){		
 		blob.body.setZeroVelocity();
-		
+						
 		if (Phaser.Rectangle.contains(blob.body, game.input.x, game.input.y)){
 			blob.body.velocity.setTo(0, 0);
 		}else{
@@ -304,6 +337,7 @@ var playState = {
 						
 		if (removeQueue.length > 0){
 			foods.children[removeQueue[0]].kill();
+			foodAmount --;
 			removeQueue.shift();
 		}
 		
@@ -344,6 +378,10 @@ var playState = {
 				
 				updateMassQueue.shift();
 			}
+		}
+		
+		if (!playerAlive){
+			blob.kill();
 		}
 		
 	},

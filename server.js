@@ -59,9 +59,7 @@ io.on("connection", function(socket){
 		makeFoodPositions();
 		
 		gameBlobs[socket.id] = blobInfo;
-		
-		console.log(blobInfo)
-				
+						
 		socket.broadcast.emit("playerAdded", blobInfo)
 				
 		socket.emit("makePlayers", gameBlobs);
@@ -80,6 +78,18 @@ io.on("connection", function(socket){
 		gameBlobs[socket.id].mass = massInfo.mass;
 				
 		socket.broadcast.emit("massChanged", massInfo);
+	})
+	
+	socket.on("playerCollision", function(collidedSprites){
+		//This finds the smaller player of the 2 that collided and declares it dead
+		if(collidedSprites[0].height > collidedSprites[1].height){
+			var deadSprite = collidedSprites[1].id;
+		}else if(collidedSprites[1].height > collidedSprites[0].height){
+			var deadSprite = collidedSprites[0].id;
+		};
+		
+		io.sockets.emit("playerDisconnect", deadSprite)
+
 	})
 	
 	socket.on("foodEaten", function(eatenPosition){
