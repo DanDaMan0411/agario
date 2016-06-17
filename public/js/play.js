@@ -349,12 +349,14 @@ var playState = {
 		
 		if (addPlayerQueue.length > 0){
 			this.spawnEnemy(addPlayerQueue[0].x, addPlayerQueue[0].y, addPlayerQueue[0].blobType, addPlayerQueue[0].mass, addPlayerQueue[0].width, addPlayerQueue[0].height, addPlayerQueue[0].id);
-					
+						
 			addPlayerQueue.shift();
 		}
 		
 		if (removePlayerQueue.length > 0){
 			enemies.children[removePlayerQueue[0]].kill();
+			console.log(enemies.children[removePlayerQueue[0]]);
+			removePlayerQueue.shift();
 		}
 				
 		if (updatePosQueue.length > 0){
