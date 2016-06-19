@@ -19,8 +19,8 @@ app.get('/', function(req, res){
 
 gameBlobs = {};
 
-var maxFoodAmount = 10;
-var worldDimension = 500;
+var maxFoodAmount = 100;
+var worldDimension = 3000;
 
 //Sets the foodPositions for the world. Produces the max amount of food for the world.
 function makeFoodPositions(){

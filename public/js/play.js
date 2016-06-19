@@ -1,10 +1,15 @@
-var maxFoodAmount = 10;
+var maxFoodAmount = 100;
+var worldDimension = 3000;
+
 var BLOB_ID;
 var foodPos;
+var colorPos = [];
 
 var enemies;
 
 var foodAmount = 0;
+
+var foods;
 
 //This is for the blob
 var startDim = 100;
@@ -43,7 +48,9 @@ socket.on("assignId", function(newPlayerId){
 //This runs when player first connects, it initializes all the food positions
 socket.on("makeFood", function(foodPositions){
 	foodPos = foodPositions;
-})
+});
+
+
 
 //These are queues for when food nneds to be either generated or removed from clients world
 var removeQueue = [];
@@ -147,16 +154,24 @@ var playState = {
 		return blobInfo
 	},
 	
+	//This initializes the colors of each food at each position of foodPos
+	initColorPos: function(){
+		for (var i = 0; i < maxFoodAmount; i ++){
+			var color = foodColors[this.getRandomInt(0, foodColors.length-1)]
+			colorPos.push(color)
+		}
+	},
+	
 	initFood: function(){
 		foods = game.add.group();
 		
 		foods.enableBody = true;
 		foods.physicsBodyType = true;
 		foods.physicsBodyType = Phaser.Physics.P2JS;
-		
+				
 		for (var i = 0; i < maxFoodAmount; i ++){			
 			if (foodPos[i] != undefined){
-				var food = foods.create(foodPos[i][0], foodPos[i][1], foodColors[this.getRandomInt(0, foodColors.length-1)]);
+				var food = foods.create(foodPos[i][0], foodPos[i][1], colorPos[i]);
 				
 				food.id = i;
 				
@@ -212,27 +227,31 @@ var playState = {
 		//This exists because the enemy blobs collide like the player is supposed to
 		//This isn't suppposed to happen and I couldn't figure out how to get rid of it
 		//The if statement is a semi fix for this problem, but it may cause problems in other areas
-		if (blobBody.sprite.name != "enemy" && foodAmount <= maxFoodAmount){
-			blob.body.data.mass ++;
-					
-			var foodBodyPosition = foodBody.sprite.id;
-						
-			socket.emit("foodEaten", foodBodyPosition);	
-			
-			if (blobBody.sprite.height < maxEatFoodSize && blobBody.sprite.width < maxEatFoodSize){		
-				blobBody.sprite.height ++;
-				blobBody.sprite.width ++;
-							
-				socket.emit("massChanged", {id: BLOB_ID, height: blobBody.sprite.height, width: blobBody.sprite.width, mass: blob.body.data.mass})
-				
-				this.updateBlob();
-				
-				blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
-				blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
-				blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
-			}
-			
+		if (blobBody.sprite.name != "enemy"){
 			foodAmount --;
+			
+			if(foodAmount <= maxFoodAmount){
+				blob.body.data.mass ++;
+				
+				console.log("Food eaten")
+						
+				var foodBodyPosition = foodBody.sprite.id;
+							
+				socket.emit("foodEaten", foodBodyPosition);	
+				
+				if (blobBody.sprite.height < maxEatFoodSize && blobBody.sprite.width < maxEatFoodSize){		
+					blobBody.sprite.height ++;
+					blobBody.sprite.width ++;
+								
+					socket.emit("massChanged", {id: BLOB_ID, height: blobBody.sprite.height, width: blobBody.sprite.width, mass: blob.body.data.mass})
+					
+					this.updateBlob();
+					
+					blobBody.sprite.body.setCircle(blobBody.sprite.width/2);
+					blobBody.sprite.body.setCollisionGroup(playerCollisionGroup);
+					blobBody.sprite.body.collides(foodCollisionGroup, this.eatFood, this);
+				}
+			}
 		}
 	},
 	
@@ -272,13 +291,13 @@ var playState = {
 		
 		game.physics.p2.restitution = 0.8;
 		
-		game.world.setBounds(0, 0, 500, 500);
+		game.world.setBounds(0, 0, worldDimension, worldDimension);
 		
 		game.stage.disableVisibilityChange = true;
 		
 		//This repeats the grid background to fit the whole bounds
-		var background = game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid');
-		background.name = "background"
+		//var background = game.add.tileSprite(0, 0, game.world.bounds.height, game.world.bounds.width, 'grid');
+		//background.name = "background";
 		
 		game.physics.p2.setPostBroadphaseCallback(this.checkSprite, this);
 		
@@ -287,9 +306,9 @@ var playState = {
 		
 		game.physics.p2.updateBoundsCollisionGroup();
 		
+		this.initColorPos();
 		this.initFood();
 		this.initEnemies();
-		
 		this.initPlayer(this.getRandomInt(startDim, game.world.width - startDim), this.getRandomInt(startDim, game.world.width - startDim), playerBlobType);
 	},
 	
@@ -302,12 +321,12 @@ var playState = {
 			var collidedSprites = [{id: body1.sprite.id, height: body1.sprite.height}, {id: body2.sprite.id, height: body2.sprite.height}]
 			socket.emit("playerCollision", collidedSprites)
 			return false;
-		}			
+		}
 		return true;			
 	},
 	
 	addFood: function(position){		
-		var food = foods.create(foodPos[position][0], foodPos[position][1], foodColors[this.getRandomInt(0, foodColors.length-1)]);
+		var food = foods.create(foodPos[position][0], foodPos[position][1], colorPos[position]);
 		
 		food.id = position;
 		
@@ -324,49 +343,63 @@ var playState = {
 		foodAmount ++;
 	},
 	
-	update: function(){		
+	update: function(){
+		
+		
+		
+		if (foods != undefined){
+			if (foods.children.length > 15){
+				foods.forEach(function(food){food.kill();});
+				foodAmount = 0;
+				this.initFood();
+			};
+		}
+		
 		blob.body.setZeroVelocity();
-						
+		
+		
 		if (Phaser.Rectangle.contains(blob.body, game.input.x, game.input.y)){
 			blob.body.velocity.setTo(0, 0);
 		}else{
 			game.physics.arcade.moveToPointer(blob, 200);
 			
 			socket.emit("posUpdated", blob.position);
-		}
-						
+		};
+		
+		
 		if (removeQueue.length > 0){
 			foods.children[removeQueue[0]].kill();
 			foodAmount --;
+			
 			removeQueue.shift();
-		}
+		};
 		
 		if (addQueue.length > 0){
 			foods.children[addQueue[0]].body.setZeroVelocity();
 			this.addFood(addQueue[0]);
+			
 			addQueue.shift();
-		}
+		};
 		
 		if (addPlayerQueue.length > 0){
 			this.spawnEnemy(addPlayerQueue[0].x, addPlayerQueue[0].y, addPlayerQueue[0].blobType, addPlayerQueue[0].mass, addPlayerQueue[0].width, addPlayerQueue[0].height, addPlayerQueue[0].id);
 						
 			addPlayerQueue.shift();
-		}
+		};
 		
 		if (removePlayerQueue.length > 0){
 			enemies.children[removePlayerQueue[0]].kill();
-			console.log(enemies.children[removePlayerQueue[0]]);
+			
 			removePlayerQueue.shift();
-		}
-				
+		};
+		
 		if (updatePosQueue.length > 0){
 			enemies.children[updatePosQueue[0].id].body.x = updatePosQueue[0].position.x;
 			enemies.children[updatePosQueue[0].id].body.y = updatePosQueue[0].position.y;
-			
 			enemies.children[updatePosQueue[0].id].body.setZeroVelocity();
 			
 			updatePosQueue.shift();
-		}
+		};
 		
 		if (updateMassQueue.length > 0){			
 			//This is to make sure enemies array is actually created
@@ -380,11 +413,12 @@ var playState = {
 				
 				updateMassQueue.shift();
 			}
-		}
+		};
 		
+		//This triggers after the player has been collided with a bigger player
 		if (!playerAlive){
 			blob.kill();
-		}
+		};
 		
 	},
 }
